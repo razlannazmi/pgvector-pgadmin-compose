@@ -13,17 +13,17 @@ no laptop, git, or deploy.sh needed.
 
 WHAT EACH FILE DOES
 -------------------
-docker-compose.yml    the two services (postgres + pgadmin)
-setup-volume.sh        creates/mounts the volume; capped or uncapped
-                        per volume.conf, and switches between the two
-                        if you already set one up before
-check-mount.sh          stops startup if a capped volume is configured
-                        but not actually mounted
-up.sh                   one command: set up the volume, then start
-Makefile                same thing but with "make up" (optional)
-.env.example            copy this to .env and put your passwords in
-volume.conf.example     copy this to volume.conf to choose capped vs.
-                        uncapped, and the size limit
+docker-compose.yml   the two services (postgres + pgadmin)
+setup-volume.sh      creates/mounts the volume; capped or uncapped
+                            per volume.conf, and switches between the two
+                            if you already set one up before
+check-mount.sh       stops startup if a capped volume is configured
+                            but not actually mounted
+up.sh                one command: set up the volume, then start
+Makefile             same thing but with "make up" (optional)
+.env.example         copy this to .env and put your passwords in
+volume.conf.example  copy this to volume.conf to choose capped vs.
+                            uncapped, and the size limit
 
 
 FIRST-TIME SETUP
