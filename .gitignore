@@ -1,0 +1,5 @@
+.env
+deploy.conf
+volume.conf
+backups/
+*.sql

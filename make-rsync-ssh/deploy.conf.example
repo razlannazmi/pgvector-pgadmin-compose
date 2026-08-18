@@ -1,0 +1,14 @@
+# Per-machine deploy target for deploy.sh.
+# Copy this to deploy.conf and edit — deploy.conf is gitignored, so each
+# laptop/deployer can point at a different server without touching deploy.sh.
+#
+#   cp deploy.conf.example deploy.conf
+
+# SSH host alias from your ~/.ssh/config
+REMOTE_HOST=aicoe-enterprise
+
+# Parent directory on the server that holds all compose stacks
+REMOTE_BASE=/compose-hub
+
+# Subfolder under REMOTE_BASE this stack deploys into
+STACK_NAME=pgvector-stack
