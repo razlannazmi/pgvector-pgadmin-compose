@@ -3,3 +3,6 @@ deploy.conf
 volume.conf
 backups/
 *.sql
+
+# Docs
+docs/

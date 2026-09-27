@@ -54,7 +54,10 @@ services:
       # Named volume: small config store, no need for a predictable host path.
       - pgadmin_data:/var/lib/pgadmin
     ports:
-      - "0.0.0.0:5050:80"
+      # Localhost only: not reachable at <server-ip>:5050. Reach it through a
+      # reverse proxy on the same host (proxy to http://127.0.0.1:5050/pgadmin4)
+      # or an SSH tunnel (ssh -L 5050:localhost:5050 <host>).
+      - "127.0.0.1:5050:80"
     logging:
       driver: "json-file"
       options:

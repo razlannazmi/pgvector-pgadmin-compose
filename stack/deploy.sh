@@ -95,6 +95,8 @@ rsync -avz --delete \
   --exclude '.git/' \
   --exclude 'backups/' \
   --exclude '*.sql' \
+  --exclude 'deploy.sh' \
+  --exclude 'deploy.conf*' \
   -e ssh \
   ./ "${REMOTE_HOST}:${REMOTE_DIR}/"
 
