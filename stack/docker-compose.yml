@@ -1,6 +1,9 @@
 services:
   postgres:
-    image: pgvector/pgvector:pg18
+    # Pinned: pgvector 0.8.6, Postgres 18, Debian bookworm. The OS is pinned
+    # too because a glibc change (e.g. bookworm -> trixie) can alter text
+    # collation order and silently corrupt indexes. Bump deliberately.
+    image: pgvector/pgvector:0.8.6-pg18-bookworm
     container_name: pgvector18
     restart: unless-stopped
     stop_grace_period: 1m
@@ -33,7 +36,7 @@ services:
         max-file: "3"
 
   pgadmin4:
-    image: dpage/pgadmin4
+    image: dpage/pgadmin4:9.18.0
     container_name: pgadmin4
     restart: unless-stopped
     depends_on:

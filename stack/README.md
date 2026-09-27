@@ -159,7 +159,15 @@ What gets left behind as a backup:
   switch worked.
 - **Uncapped -> capped:** the old plain data directory is renamed to
   something like `/var/lib/postgresql/18/data.pre-capped-<timestamp>`.
-  Delete it yourself once you've verified the switch worked.
+  If an old `/var/lib/pgvector18.img` was still there from an earlier
+  capped setup, it is never overwritten: it's renamed to
+  `/var/lib/pgvector18.img.pre-capped-<timestamp>` and a fresh image is
+  created (so you need `CAP_SIZE` of extra free disk). Delete the
+  backups yourself once you've verified the switch worked.
+
+If the server rebooted and the capped image simply failed to mount,
+`./up.sh` just mounts it again; it does not treat the empty directory as
+a switch.
 
 You can also switch one-off without touching `volume.conf`:
 

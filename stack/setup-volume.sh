@@ -77,9 +77,27 @@ refuse_if_stack_running() {
 }
 
 # --- figure out what's actually live right now, independent of CAPPED -------
+# Not mounted != uncapped: after a failed mount or on first install the dir is
+# just empty. Only treat it as uncapped if it holds a real cluster (PG_VERSION).
 currently_capped="false"
 if mountpoint -q "$MOUNT_POINT" 2>/dev/null; then
   currently_capped="true"
+elif [[ "$CAPPED" == "true" ]]; then
+  if [[ -f "${MOUNT_POINT}/pgdata/PG_VERSION" ]]; then
+    : # real uncapped data present -> genuine uncapped -> capped switch (CASE 2)
+  elif [[ -z "$(ls -A "$MOUNT_POINT" 2>/dev/null)" ]]; then
+    # empty or missing: first install, or the capped image just isn't mounted
+    # yet. Nothing to migrate -> plain capped setup, which (re)mounts it.
+    currently_capped="true"
+  else
+    echo "ERROR: ${MOUNT_POINT} is not mounted and is not empty, but holds no" >&2
+    echo "Postgres cluster (no pgdata/PG_VERSION). Refusing to mount over it or" >&2
+    echo "migrate it. Contents:" >&2
+    ls -la "$MOUNT_POINT" >&2
+    echo "Inspect it, move it aside (e.g. mv ${MOUNT_POINT} ${MOUNT_POINT}.unknown)," >&2
+    echo "then re-run this script." >&2
+    exit 1
+  fi
 fi
 
 # =================================================================================
@@ -103,6 +121,7 @@ if [[ "$CAPPED" == "$currently_capped" ]]; then
     if ! fallocate -l "$CAP_SIZE" "$IMG_PATH"; then
       echo "ERROR: could not allocate ${CAP_SIZE}. Not enough free disk?" >&2
       df -h "$(dirname "$IMG_PATH")" >&2
+      rm -f "$IMG_PATH"   # partial file we just created; would otherwise be reused unformatted
       exit 1
     fi
     echo ">> Formatting ${IMG_PATH} as ext4"
@@ -195,26 +214,55 @@ fi
 echo ">> Switching UNCAPPED plain filesystem -> CAPPED volume (limit ${CAP_SIZE})"
 echo "   Live data at ${MOUNT_POINT} will be copied into a ${CAP_SIZE} loopback image."
 echo "   The old plain directory is kept on disk as a backup, not deleted."
-confirm ">> Proceed with the switch to capped (${CAP_SIZE})?" || { echo "Aborted."; exit 1; }
 
+# An existing image is never synced over: it may hold the real data (e.g. the
+# plain directory is a fresh cluster Postgres created while the image failed
+# to mount). Keep it as a backup and copy into a brand-new image instead.
+OLD_IMG_BACKUP=""
 if [[ -f "$IMG_PATH" ]]; then
-  echo ">> NOTE: ${IMG_PATH} already exists from a previous capped setup — reusing it"
-  echo "   (its contents will be synced to match your current live data)."
-else
-  echo ">> Allocating ${CAP_SIZE} image at ${IMG_PATH}"
-  if ! fallocate -l "$CAP_SIZE" "$IMG_PATH"; then
-    echo "ERROR: could not allocate ${CAP_SIZE}. Not enough free disk?" >&2
-    df -h "$(dirname "$IMG_PATH")" >&2
+  if [[ -n "$(losetup -j "$IMG_PATH" 2>/dev/null)" ]]; then
+    echo "ERROR: ${IMG_PATH} is attached to a loop device (mounted somewhere?):" >&2
+    losetup -j "$IMG_PATH" >&2
+    echo "Unmount it first, then re-run this script." >&2
     exit 1
   fi
-  echo ">> Formatting ${IMG_PATH} as ext4"
-  mkfs.ext4 -q "$IMG_PATH"
+  OLD_IMG_BACKUP="${IMG_PATH}.pre-capped-${STAMP}"
+  echo ""
+  echo "   WARNING: ${IMG_PATH} already exists, from an earlier capped setup."
+  echo "   If you expected your data to be INSIDE that image (i.e. you never"
+  echo "   meant to leave capped mode), answer N: the image probably just failed"
+  echo "   to mount, and the data in ${MOUNT_POINT} is not your real database."
+  echo "   If you answer y, the existing image is NOT modified; it is renamed to"
+  echo "   ${OLD_IMG_BACKUP} and a new ${CAP_SIZE} image is created"
+  echo "   (needs ${CAP_SIZE} more free disk; delete the old image yourself once"
+  echo "   you've verified the switch)."
+  echo ""
+fi
+confirm ">> Proceed with the switch to capped (${CAP_SIZE})?" || { echo "Aborted."; exit 1; }
+
+if [[ -n "$OLD_IMG_BACKUP" ]]; then
+  echo ">> Keeping the existing image as a backup: ${OLD_IMG_BACKUP}"
+  mv "$IMG_PATH" "$OLD_IMG_BACKUP"
 fi
 
+echo ">> Allocating ${CAP_SIZE} image at ${IMG_PATH}"
+if ! fallocate -l "$CAP_SIZE" "$IMG_PATH"; then
+  echo "ERROR: could not allocate ${CAP_SIZE}. Not enough free disk?" >&2
+  df -h "$(dirname "$IMG_PATH")" >&2
+  rm -f "$IMG_PATH"   # partial file we just created; the old image (if any) is safe at OLD_IMG_BACKUP
+  if [[ -n "$OLD_IMG_BACKUP" ]]; then
+    mv "$OLD_IMG_BACKUP" "$IMG_PATH"
+    echo "Restored the original ${IMG_PATH}; nothing was changed." >&2
+  fi
+  exit 1
+fi
+echo ">> Formatting ${IMG_PATH} as ext4"
+mkfs.ext4 -q "$IMG_PATH"
+
 mkdir -p "$MIGRATE_MOUNT"
-echo ">> Mounting the image at ${MIGRATE_MOUNT} to copy data in"
+echo ">> Mounting the new image at ${MIGRATE_MOUNT} to copy data in"
 mount -o loop "$IMG_PATH" "$MIGRATE_MOUNT"
-rsync -aHAX --delete "$MOUNT_POINT"/ "$MIGRATE_MOUNT"/
+rsync -aHAX "$MOUNT_POINT"/ "$MIGRATE_MOUNT"/
 umount "$MIGRATE_MOUNT"
 rmdir "$MIGRATE_MOUNT" 2>/dev/null || true
 
@@ -241,3 +289,6 @@ fi
 echo ">> Success. Now running capped (limit ${CAP_SIZE}):"
 df -h "$MOUNT_POINT"
 echo ">> Old uncapped data kept at ${BACKUP_DIR} as a backup (delete manually once verified)."
+if [[ -n "$OLD_IMG_BACKUP" ]]; then
+  echo ">> Previous capped image kept at ${OLD_IMG_BACKUP} (delete manually once verified)."
+fi
